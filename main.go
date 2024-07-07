@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"encoding/json"
 
 	// yourbasic.org/graph as graph
 	"github.com/yourbasic/graph"
@@ -18,6 +19,14 @@ type Wayfinder struct {
 	rev   map[int]string
 	next  int
 	state string
+}
+
+type serializableWayfinder struct {
+	Nodes map[string]int  `json:"nodes"`
+	Rev   map[int]string  `json:"rev"`
+	Next  int             `json:"next"`
+	State string          `json:"state"`
+	Edges [][2]int        `json:"edges"` // Represents graph edges
 }
 
 func NewWayfinder() *Wayfinder {
@@ -33,9 +42,12 @@ func NewWayfinder() *Wayfinder {
 func (wf *Wayfinder) MarshalJSON() ([]byte, error) {
 	// Create a list to store the edges
 	var edges [][2]int
-	wf.g.Visit(func(v, w int, c int64) {
-		edges = append(edges, [2]int{v, w})
-	})
+	for v := 0; v < wf.g.Order(); v++ {
+		wf.g.Visit(v, func(w int, c int64) bool {
+			edges = append(edges, [2]int{v, w})
+			return true // continue visiting neighbors
+		})
+	}
 
 	// Create a serializable version of Wayfinder
 	sw := serializableWayfinder{
@@ -97,9 +109,16 @@ func (wf *Wayfinder) saveState() {
 	}
 	defer file.Close()
 
-	_, err = file.Write(wf.MarshalJSON())
+	bytes, err = wf.MarshalJSON()
+	if err != nil {
+		fmt.Println("Error marshaling state:", err)
+		return
+	}
+
+	_, err = file.Write(bytes)
 	if err != nil {
 		fmt.Println("Error writing state to file:", err)
+		return
 	}
 }
 
