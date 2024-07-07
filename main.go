@@ -326,10 +326,11 @@ func LoadMetaState(filename string) *MetaState {
 	return &ms
 }
 
-// global ms MetaState
+// global g_ms *MetaState
 var g_ms *MetaState
 
 func main() {
+	// TODO get this dynamic loading to work instead of forced "state.json"
 	// g_ms = LoadMetaState("metastate.json")
 	// if g_ms == nil {
 	// 	fmt.Println("Error loading metastate.")
