@@ -70,7 +70,12 @@ func (wf *Wayfinder) UnmarshalJSON(data []byte) error {
 	}
 
 	// Recreate the graph
-	wf.g = graph.New(len(sw.Nodes))
+	nodes := len(sw.Nodes)
+	if nodes < 200 {
+		nodes = 200
+	}
+	wf.g = graph.New(nodes)
+
 	for _, edge := range sw.Edges {
 		wf.g.AddCost(edge[0], edge[1], 1)
 	}
