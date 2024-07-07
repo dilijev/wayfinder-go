@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -108,6 +109,8 @@ func (wf *Wayfinder) getCurrentNode() string {
 }
 
 func (wf *Wayfinder) saveState() {
+	fmt.Println("Saving state to file:", g_ms.Savefile)
+
 	file, err := os.Create(g_ms.Savefile)
 	if err != nil {
 		fmt.Println("Error saving state:", err)
@@ -182,6 +185,11 @@ func (wf *Wayfinder) addEdge(from, to string, weight int) {
 	id1 := wf.nodes[from]
 	id2 := wf.nodes[to]
 	wf.g.AddCost(id1, id2, int64(weight))
+
+	fmt.Printf("Added edge from '%s' to '%s' with weight %d\n", from, to, weight)
+
+	// Save the state after adding an edge
+	wf.saveState()
 }
 
 func (wf *Wayfinder) findPath(start, end string) ([]string, error) {
@@ -190,6 +198,8 @@ func (wf *Wayfinder) findPath(start, end string) ([]string, error) {
 	if !ok1 || !ok2 {
 		return nil, errors.New("one or both nodes not found")
 	}
+
+	fmt.Println("start:", start, "end:", end)
 
 	// Find the shortest path using Dijkstra's algorithm
 	path, _ := graph.ShortestPath(wf.g, id1, id2)
@@ -203,10 +213,14 @@ func (wf *Wayfinder) findPath(start, end string) ([]string, error) {
 	// for each key in the map, append the value to the result
 	// result is a slice of strings
 	// the slice is the path from start to end
-	for id := range path {
+	for x := range path {
 		// convert id from int64 to int
-		id := int(id)
-		result = append(result, wf.rev[id])
+		id := path[x]
+
+		label := wf.rev[id]
+		fmt.Println("id:", id, "rev[id]:", label)
+
+		result = append(result, label)
 	}
 	return result, nil
 }
@@ -260,13 +274,40 @@ func (wf *Wayfinder) handleAction(action string, params []string) {
 
 		wf.addEdge(from_node, to_node, weight)
 
+	case "nodes":
+		fmt.Println("Nodes:")
+
+		// add all the nodes to a list
+		var nodes []string
+		for node := range wf.nodes {
+			// append the node to the list
+			nodes = append(nodes, node)
+		}
+
+		// sort the list
+		sort.Strings(nodes)
+		for _, node := range nodes {
+			fmt.Println(node)
+		}
+
+	case "edges":
+		// list edges
+		fmt.Println("Edges:")
+		for v := 0; v < wf.g.Order(); v++ {
+			wf.g.Visit(v, func(w int, c int64) bool {
+				fmt.Printf("%s [%d] -> %s [%d] (%d)\n", wf.rev[v], v, wf.rev[w], w, c)
+				return true // continue visiting neighbors
+			})
+		}
+
 	default:
-		fmt.Println("Invalid action. Please use one of the following: at, to")
+		fmt.Println("Invalid action. Please use one of the following: at, to, add, nodes, edges, exit")
 		return
 	}
 }
 
 func repl(wf *Wayfinder) {
+	fmt.Println("Starting REPL. Type 'exit' to quit.")
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		fmt.Print("way> ")
@@ -285,6 +326,7 @@ func repl(wf *Wayfinder) {
 		// 	fmt.Println("Suggestions:", strings.Join(suggestions, ", "))
 
 		case "exit":
+			wf.saveState()
 			fmt.Println("Exiting REPL.")
 			return
 
@@ -381,9 +423,6 @@ func main() {
 		fmt.Println("Error loading state:", err)
 		return
 	}
-
-	wf.addEdge("A", "B", 1)
-	return
 
 	// If the command line is "repl" then start the REPL
 	// Otherwise, parse the command line arguments
