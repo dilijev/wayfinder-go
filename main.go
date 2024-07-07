@@ -1,7 +1,3 @@
-/*
-I'd like to make a shortest path finder with a CLI to dynamically add links and query. Each node will be a text description. I don't necessarily want to have a set of texts to choose from but I'd be interested to have that as an option such that the CLI will suggest options from the pre-populated list for the item you tried to enter. The main inspiration is wayfinding in a decoupled entrance randomizer of Ocarina of Time and Majora's Mask
-*/
-
 package main
 
 import (
@@ -9,49 +5,71 @@ import (
 	"fmt"
 	"os"
 	"strings"
-
-	"github.com/urfave/cli"
+	// "sync"
 )
 
-func main() {
-	app := cli.NewApp()
-	app.Name = "wayfinder"
-	app.Usage = "find the shortest path between two nodes"
-	app.Action = func(c *cli.Context) error {
-		fmt.Println("Hello friend!")
-		return nil
+func repl(wf *Wayfinder) {
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Print("way> ")
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(input)
+		if input == "" {
+			continue
+		}
+		parts := strings.Split(input, " ")
+		command := parts[0]
+		params := strings.Join(parts[1:], " ")
+
+		switch command {
+		case "at":
+			if params == "" {
+				fmt.Println("Please provide a node name.")
+				continue
+			}
+			node := params
+			wf.setCurrentNode(node)
+			wf.saveState()
+			fmt.Printf("Current node set to '%s'\n", node)
+
+		case "suggest":
+			suggestions := wf.suggestNodesConcurrent(params)
+			fmt.Println("Suggestions:", strings.Join(suggestions, ", "))
+
+		case "exit":
+			fmt.Println("Exiting REPL.")
+			return
+
+		default:
+			fmt.Println("Unknown command:", command)
+		}
 	}
-	app.Run(os.Args)
 }
 
-func addLink() {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter the first node: ")
-	node1, _ := reader.ReadString('\n')
-	fmt.Print("Enter the second node: ")
-	node2, _ := reader.ReadString('\n')
-	fmt.Print("Enter the distance between the nodes: ")
-	distance, _ := reader.ReadString('\n')
-}
+func main() {
+	wf := NewWayfinder()
+	wf.loadState()
 
-func query() {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter the starting node: ")
-	start, _ := reader.ReadString('\n')
-	fmt.Print("Enter the ending node: ")
-	end, _ := reader.ReadString('\n')
-}
+	if len(os.Args) > 1 {
+		action := os.Args[1]
+		params := strings.Join(os.Args[2:], " ")
 
-func suggest() {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter the first few characters of the node: ")
-	node, _ := reader.ReadString('\n')
-}
+		switch action {
+		case "at":
+			if params == "" {
+				fmt.Println("Please provide a node name.")
+				os.Exit(1)
+			}
+			node := params
+			wf.setCurrentNode(node)
+			wf.saveState()
+			fmt.Printf("Current node set to '%s'\n", node)
 
-func shortestPath() {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter the starting node: ")
-	start, _ := reader.ReadString('\n')
-	fmt.Print("Enter the ending node: ")
-	end, _ := reader.ReadString('\n')
+		default:
+			fmt.Println("Invalid action. Please use one of the following: at")
+			os.Exit(1)
+		}
+	} else {
+		repl(wf)
+	}
 }
