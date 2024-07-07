@@ -1,4 +1,4 @@
-module github.com/dilijev/wayfinder
+module github.com/dilijev/wayfinder-go
 
 go 1.22.5
 

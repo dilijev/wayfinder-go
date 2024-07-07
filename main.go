@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -31,7 +32,7 @@ type serializableWayfinder struct {
 
 func NewWayfinder() *Wayfinder {
 	return &Wayfinder{
-		g:     graph.New(0),
+		g:     graph.New(200),
 		nodes: make(map[string]int),
 		rev:   make(map[int]string),
 		next:  0,
@@ -169,6 +170,15 @@ func (wf *Wayfinder) suggestNodesConcurrent(partial string) []string {
 	return suggestions
 }
 
+func (wf *Wayfinder) addEdge(from, to string, weight int) {
+	wf.addNode(from)
+	wf.addNode(to)
+
+	id1 := wf.nodes[from]
+	id2 := wf.nodes[to]
+	wf.g.AddCost(id1, id2, int64(weight))
+}
+
 func (wf *Wayfinder) findPath(start, end string) ([]string, error) {
 	id1, ok1 := wf.nodes[start]
 	id2, ok2 := wf.nodes[end]
@@ -199,34 +209,55 @@ func (wf *Wayfinder) findPath(start, end string) ([]string, error) {
 // A function to handle the command line arguments
 
 // Function to handle the requested action no matter whether it's a command line or a REPL
-func (wf *Wayfinder) handleAction(action string, params string) {
+func (wf *Wayfinder) handleAction(action string, params []string) {
 	switch action {
 	case "at":
-		if params == "" {
+		if len(params) == 0 {
 			fmt.Println("Please provide a node name.")
-			os.Exit(1)
+			return
 		}
-		at_node := params
+		at_node := params[0]
 		wf.setCurrentNode(at_node)
 		wf.saveState()
 		fmt.Printf("Current node set to '%s'\n", at_node)
 
 	case "to":
-		if params == "" {
+		if len(params) == 0 {
 			fmt.Println("Please provide a node name.")
-			os.Exit(1)
+			return
 		}
-		to_node := params
+		to_node := params[0]
 		path, err := wf.findPath(wf.getCurrentNode(), to_node)
 		if err != nil {
 			fmt.Println("Error finding path:", err)
-			os.Exit(1)
+			return
 		}
 		fmt.Println("Path:", path)
 
+	case "add":
+		if len(params) < 2 {
+			fmt.Println("Please provide from_node and to_node.")
+			return
+		}
+		// the first param
+		from_node := params[0]
+		to_node := params[1]
+		// get params[2] if it exists, otherwise default to "1"
+		weight := 1
+		if len(params) > 2 {
+			var err error
+			weight, err = strconv.Atoi(params[2])
+			if err != nil {
+				fmt.Println("Invalid weight:", err)
+				return
+			}
+		}
+
+		wf.addEdge(from_node, to_node, weight)
+
 	default:
-		fmt.Println("Invalid action. Please use one of the following: at")
-		os.Exit(1)
+		fmt.Println("Invalid action. Please use one of the following: at, to")
+		return
 	}
 }
 
@@ -241,7 +272,7 @@ func repl(wf *Wayfinder) {
 		}
 		parts := strings.Split(input, " ")
 		command := parts[0]
-		params := strings.Join(parts[1:], " ")
+		params := parts[1:]
 
 		switch command {
 		// case "suggest":
@@ -346,6 +377,9 @@ func main() {
 		return
 	}
 
+	wf.addEdge("A", "B", 1)
+	return
+
 	// If the command line is "repl" then start the REPL
 	// Otherwise, parse the command line arguments
 	// and execute the specified action.
@@ -372,7 +406,7 @@ func main() {
 		repl(wf)
 	} else {
 		action := os.Args[1]
-		params := strings.Join(os.Args[2:], " ")
+		params := os.Args[2:]
 		wf.handleAction(action, params)
 	}
 }
