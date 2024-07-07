@@ -2,12 +2,12 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"sync"
-	"encoding/json"
 
 	// yourbasic.org/graph as graph
 	"github.com/yourbasic/graph"
@@ -22,11 +22,11 @@ type Wayfinder struct {
 }
 
 type serializableWayfinder struct {
-	Nodes map[string]int  `json:"nodes"`
-	Rev   map[int]string  `json:"rev"`
-	Next  int             `json:"next"`
-	State string          `json:"state"`
-	Edges [][2]int        `json:"edges"` // Represents graph edges
+	Nodes map[string]int `json:"nodes"`
+	Rev   map[int]string `json:"rev"`
+	Next  int            `json:"next"`
+	State string         `json:"state"`
+	Edges [][2]int       `json:"edges"` // Represents graph edges
 }
 
 func NewWayfinder() *Wayfinder {
@@ -109,6 +109,8 @@ func (wf *Wayfinder) saveState() {
 	}
 	defer file.Close()
 
+	// define bytes
+	var bytes []byte
 	bytes, err = wf.MarshalJSON()
 	if err != nil {
 		fmt.Println("Error marshaling state:", err)
@@ -164,13 +166,20 @@ func (wf *Wayfinder) findPath(start, end string) ([]string, error) {
 	}
 
 	// Find the shortest path using Dijkstra's algorithm
-	_, path := graph.ShortestPath(wf.g, id1, id2)
+	path, _ := graph.ShortestPath(wf.g, id1, id2)
 	if len(path) == 0 {
 		return nil, errors.New("no path found")
 	}
 
 	var result []string
-	for _, id := range path {
+	// what does range do?
+	// range returns the key of the map
+	// for each key in the map, append the value to the result
+	// result is a slice of strings
+	// the slice is the path from start to end
+	for id := range path {
+		// convert id from int64 to int
+		id := int(id)
 		result = append(result, wf.rev[id])
 	}
 	return result, nil
@@ -179,17 +188,17 @@ func (wf *Wayfinder) findPath(start, end string) ([]string, error) {
 // A function to handle the command line arguments
 
 // Function to handle the requested action no matter whether it's a command line or a REPL
-func handleAction(wf *Wayfinder, action string, params string) {
+func (wf *Wayfinder) handleAction(action string, params string) {
 	switch action {
 	case "at":
 		if params == "" {
 			fmt.Println("Please provide a node name.")
 			os.Exit(1)
 		}
-		node := params
-		wf.setCurrentNode(node)
+		at_node := params
+		wf.setCurrentNode(at_node)
 		wf.saveState()
-		fmt.Printf("Current node set to '%s'\n", node)
+		fmt.Printf("Current node set to '%s'\n", at_node)
 
 	case "to":
 		if params == "" {
@@ -197,7 +206,7 @@ func handleAction(wf *Wayfinder, action string, params string) {
 			os.Exit(1)
 		}
 		to_node := params
-		path, err := wf.findPath(wf.getCurrentNode(), node)
+		path, err := wf.findPath(wf.getCurrentNode(), to_node)
 		if err != nil {
 			fmt.Println("Error finding path:", err)
 			os.Exit(1)
@@ -233,7 +242,7 @@ func repl(wf *Wayfinder) {
 			return
 
 		default:
-			handleAction(wf, command, params)
+			wf.handleAction(command, params)
 		}
 	}
 }
