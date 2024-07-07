@@ -102,7 +102,7 @@ func (wf *Wayfinder) getCurrentNode() string {
 }
 
 func (wf *Wayfinder) saveState() {
-	file, err := os.Create("state.json")
+	file, err := os.Create(g_ms.Savefile)
 	if err != nil {
 		fmt.Println("Error saving state:", err)
 		return
@@ -124,17 +124,28 @@ func (wf *Wayfinder) saveState() {
 	}
 }
 
-func (wf *Wayfinder) loadState() {
-	data, err := os.ReadFile("state.json")
+// create default state if loadState fails
+func CreateBlankWayfinderStateFile() {
+	wf := NewWayfinder()
+	wf.saveState()
+}
+
+func (wf *Wayfinder) loadState() error {
+	data, err := os.ReadFile(g_ms.Savefile)
 	if err != nil {
 		fmt.Println("Error loading state:", err)
-		return
+		fmt.Println("Creating blank state file.")
+		CreateBlankWayfinderStateFile()
+		return nil
 	}
 
 	err = wf.UnmarshalJSON(data)
 	if err != nil {
 		fmt.Println("Error unmarshaling state:", err)
+		return err
 	}
+
+	return nil
 }
 
 func (wf *Wayfinder) suggestNodesConcurrent(partial string) []string {
@@ -233,9 +244,9 @@ func repl(wf *Wayfinder) {
 		params := strings.Join(parts[1:], " ")
 
 		switch command {
-		case "suggest":
-			suggestions := wf.suggestNodesConcurrent(params)
-			fmt.Println("Suggestions:", strings.Join(suggestions, ", "))
+		// case "suggest":
+		// 	suggestions := wf.suggestNodesConcurrent(params)
+		// 	fmt.Println("Suggestions:", strings.Join(suggestions, ", "))
 
 		case "exit":
 			fmt.Println("Exiting REPL.")
@@ -247,9 +258,92 @@ func repl(wf *Wayfinder) {
 	}
 }
 
+// JSON serializable
+type MetaState struct {
+	// the current save file
+	Savefile string `json:"savefile"`
+}
+
+func (ms *MetaState) MarshalJSON() ([]byte, error) {
+	return json.Marshal(ms)
+}
+
+func (ms *MetaState) UnmarshalJSON(data []byte) error {
+	return json.Unmarshal(data, ms)
+}
+
+func (ms *MetaState) saveState() {
+	file, err := os.Create("metastate.json")
+	if err != nil {
+		fmt.Println("Error saving metastate:", err)
+		return
+	}
+	defer file.Close()
+
+	// define bytes
+	var bytes []byte
+	bytes, err = ms.MarshalJSON()
+	if err != nil {
+		fmt.Println("Error marshaling metastate:", err)
+		return
+	}
+
+	_, err = file.Write(bytes)
+	if err != nil {
+		fmt.Println("Error writing metastate to file:", err)
+		return
+	}
+}
+
+func ForceOverwriteMetaState() *MetaState {
+	ms := MetaState{
+		Savefile: "state.json",
+	}
+	ms.saveState()
+	return &ms
+}
+
+func LoadMetaState(filename string) *MetaState {
+	// if filename does not exist, or the contents do not parse as JSON, write a new one
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		fmt.Println("No metastate file found. Creating metadata.json")
+		return ForceOverwriteMetaState()
+	}
+
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		fmt.Println("Error loading metastate.json. Resetting to default.", err)
+		return ForceOverwriteMetaState()
+	}
+
+	var ms MetaState
+	err = ms.UnmarshalJSON(data)
+	if err != nil {
+		fmt.Println("Error unmarshaling metastate. Resetting to default.", err)
+		return ForceOverwriteMetaState()
+	}
+
+	return &ms
+}
+
+// global ms MetaState
+var g_ms *MetaState
+
 func main() {
+	// g_ms = LoadMetaState("metastate.json")
+	// if g_ms == nil {
+	// 	fmt.Println("Error loading metastate.")
+	// 	return
+	// }
+
+	g_ms = &MetaState{Savefile: "state.json"}
+
 	wf := NewWayfinder()
-	wf.loadState()
+	err := wf.loadState()
+	if err != nil {
+		fmt.Println("Error loading state:", err)
+		return
+	}
 
 	// If the command line is "repl" then start the REPL
 	// Otherwise, parse the command line arguments
@@ -261,28 +355,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	if os.Args[1] == "repl" {
-		repl(wf)
-	} else {
-		wf.handleAction(os.Args[1], strings.Join(os.Args[2:], " "))
+	// consider a top level context file separate from save file
+	// this file tells us the path to the save file to use
+	// if not set, start with the default "state.json" in the current directory
 
-		action := os.Args[1]
-		params := strings.Join(os.Args[2:], " ")
-
-		switch action {
-		case "at":
-			if params == "" {
-				fmt.Println("Please provide a node name.")
-				os.Exit(1)
-			}
-			node := params
-			wf.setCurrentNode(node)
-			wf.saveState()
-			fmt.Printf("Current node set to '%s'\n", node)
-
-		default:
-			fmt.Println("Invalid action. Please use one of the following: at")
+	if os.Args[1] == "savefile" {
+		if len(os.Args) < 3 {
+			fmt.Println("Usage: wayfinder savefile [filename]")
 			os.Exit(1)
 		}
+
+		g_ms.Savefile = os.Args[2]
+		g_ms.saveState()
+	} else if os.Args[1] == "repl" {
+		repl(wf)
+	} else {
+		action := os.Args[1]
+		params := strings.Join(os.Args[2:], " ")
+		wf.handleAction(action, params)
 	}
 }
